@@ -1,0 +1,13 @@
+{
+  "name": "x-hmac",
+  "version": "1.0.0",
+  "description": "LINE X-HMAC calculator using LTSM WebAssembly module",
+  "main": "hmac_node.js",
+  "scripts": {
+    "hmac": "node hmac_node.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "jsdom": "^27.2.0"
+  }
+}

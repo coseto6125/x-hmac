@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HMAC Calculator Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #252526;
+            border-radius: 5px;
+        }
+        h1, h2 {
+            color: #4ec9b0;
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
+            color: #9cdcfe;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            background: #3c3c3c;
+            border: 1px solid #555;
+            color: #d4d4d4;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        button {
+            background: #0e639c;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin: 10px 5px 10px 0;
+        }
+        button:hover {
+            background: #1177bb;
+        }
+        .output {
+            background: #1e1e1e;
+            padding: 10px;
+            border-left: 3px solid #4ec9b0;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        .error {
+            border-left-color: #f48771;
+            color: #f48771;
+        }
+        .success {
+            border-left-color: #89d185;
+            color: #89d185;
+        }
+        pre {
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>HMAC Calculator 測試工具</h1>
+
+    <div class="section">
+        <h2>LTSM 狀態</h2>
+        <div id="ltsmStatus" class="output">載入中...</div>
+        <button onclick="initLTSM()">初始化 LTSM</button>
+    </div>
+
+    <div class="section">
+        <h2>測試輔助函數</h2>
+
+        <label>測試文字：</label>
+        <input type="text" id="testInput" value="3.7.1" placeholder="輸入要測試的文字">
+
+        <button onclick="testSHA256()">測試 SHA-256</button>
+        <button onclick="testBase64()">測試 Base64 轉換</button>
+
+        <div id="helperOutput"></div>
+    </div>
+
+    <div class="section">
+        <h2>HMAC 計算參數</h2>
+
+        <label>SecureKey Token:</label>
+        <input type="text" id="token" placeholder="SecureKey Token (從 .env 取得)">
+
+        <label>Access Token:</label>
+        <input type="text" id="accessToken" placeholder="輸入 access token">
+
+        <label>API Path:</label>
+        <input type="text" id="path" value="/api/v1/messages/send" placeholder="例如: /api/v1/messages/send">
+
+        <label>Body (JSON 字串，可選):</label>
+        <textarea id="body" rows="3" placeholder='例如: {"message":"Hello"}'></textarea>
+
+        <button onclick="calculateHMAC()">計算 HMAC</button>
+
+        <div id="hmacOutput"></div>
+    </div>
+
+    <div class="section">
+        <h2>配置資訊</h2>
+        <div class="output">
+            <strong>APP_VERSION:</strong> 3.7.1<br>
+            <strong>SECURE_KEY_TOKENS:</strong> 請參考 .env.example 設定
+        </div>
+    </div>
+
+    <!-- 載入 ltsmSandbox.js 以取得 window.LTSM -->
+    <script src="../lib/ltsmSandbox.js"></script>
+    <script>
+        function showOutput(elementId, message, type = 'output') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="output ${type}">${message}</div>`;
+        }
+
+        function updateLtsmStatus() {
+            const statusEl = document.getElementById('ltsmStatus');
+            if (window.LTSM) {
+                const secureKey = window.LTSM.getSecureKey();
+                const versionHash = window.LTSM.getVersionHash();
+                if (secureKey && versionHash) {
+                    statusEl.innerHTML = '✅ LTSM 已初始化完成';
+                    statusEl.className = 'output success';
+                } else {
+                    statusEl.innerHTML = '⚠️ LTSM 已載入，但尚未初始化。請點擊「初始化 LTSM」按鈕。';
+                    statusEl.className = 'output';
+                }
+            } else {
+                statusEl.innerHTML = '❌ LTSM 未載入';
+                statusEl.className = 'output error';
+            }
+        }
+
+        async function initLTSM() {
+            const statusEl = document.getElementById('ltsmStatus');
+            const token = document.getElementById('token').value;
+
+            if (!window.LTSM) {
+                statusEl.innerHTML = '❌ window.LTSM 不存在，請確認 ltsmSandbox.js 已載入';
+                statusEl.className = 'output error';
+                return;
+            }
+
+            try {
+                statusEl.innerHTML = '⏳ 正在初始化...';
+                // 使用 calculateHmac 並傳入 token 來觸發初始化
+                await window.LTSM.calculateHmac({
+                    path: '/test',
+                    accessToken: 'test',
+                    token: token
+                });
+                updateLtsmStatus();
+            } catch (error) {
+                statusEl.innerHTML = `❌ 初始化失敗: ${error.message}`;
+                statusEl.className = 'output error';
+            }
+        }
+
+        async function testSHA256() {
+            try {
+                const input = document.getElementById('testInput').value;
+                // 優先使用 LTSM，否則使用 Web Crypto API
+                const hash = window.LTSM
+                    ? await window.LTSM.sha256(input)
+                    : new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input)));
+                const hashHex = Array.from(hash).map(b => b.toString(16).padStart(2, '0')).join('');
+                const hashBase64 = window.LTSM ? window.LTSM.toBase64(hash) : btoa(String.fromCharCode(...hash));
+
+                showOutput('helperOutput', `
+                    <strong>SHA-256 測試結果：</strong><br>
+                    輸入: ${input}<br>
+                    輸出 (Hex): ${hashHex}<br>
+                    輸出 (Base64): ${hashBase64}
+                `, 'success');
+            } catch (error) {
+                showOutput('helperOutput', `錯誤: ${error.message}`, 'error');
+            }
+        }
+
+        async function testBase64() {
+            try {
+                const input = document.getElementById('testInput').value;
+                const toB64 = window.LTSM ? window.LTSM.toBase64 : (arr) => btoa(String.fromCharCode(...arr));
+                const fromB64 = window.LTSM ? window.LTSM.fromBase64 : (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+                const encoded = toB64(new TextEncoder().encode(input));
+                const decoded = new TextDecoder().decode(fromB64(encoded));
+
+                showOutput('helperOutput', `
+                    <strong>Base64 測試結果：</strong><br>
+                    原始文字: ${input}<br>
+                    Base64 編碼: ${encoded}<br>
+                    解碼結果: ${decoded}<br>
+                    ${input === decoded ? '✅ 編解碼成功' : '❌ 編解碼失敗'}
+                `, 'success');
+            } catch (error) {
+                showOutput('helperOutput', `錯誤: ${error.message}`, 'error');
+            }
+        }
+
+        async function calculateHMAC() {
+            try {
+                const token = document.getElementById('token').value;
+                const accessToken = document.getElementById('accessToken').value;
+                const path = document.getElementById('path').value;
+                const body = document.getElementById('body').value || undefined;
+
+                if (!path) {
+                    throw new Error('請填寫 Path');
+                }
+
+                if (!window.LTSM) {
+                    throw new Error('LTSM 未載入，請確認 ltsmSandbox.js 已正確載入');
+                }
+
+                // 使用 window.LTSM.calculateHmac
+                const hmac = await window.LTSM.calculateHmac({
+                    path,
+                    body,
+                    accessToken,
+                    token
+                });
+
+                showOutput('hmacOutput', `
+                    <strong>HMAC 計算結果：</strong><br>
+                    X-Hmac: ${hmac}<br><br>
+                    <strong>使用的參數：</strong><br>
+                    Path: ${path}<br>
+                    Body: ${body || '(empty)'}<br>
+                    Access Token: ${accessToken || '(empty)'}
+                `, 'success');
+
+                updateLtsmStatus();
+            } catch (error) {
+                showOutput('hmacOutput', `
+                    <strong>❌ 錯誤:</strong> ${error.message}
+                `, 'error');
+            }
+        }
+
+        // 頁面載入時檢查 LTSM 狀態
+        window.addEventListener('load', () => {
+            console.log('HMAC Calculator Test 已載入');
+            console.log('window.LTSM:', window.LTSM);
+            updateLtsmStatus();
+        });
+    </script>
+</body>
+</html>
